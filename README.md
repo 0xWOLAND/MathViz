@@ -1,5 +1,7 @@
 # Approximate Squaring Visualization
 
+![Approximate Squaring](./approximate_squaring.gif)
+
 This is a 3D visualization of the "approximate squaring" function studied in the paper "Approximate Squaring" by J. C. Lagarias and N. J. A. Sloane (2004). 
 
 ## Background

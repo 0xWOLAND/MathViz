@@ -95,7 +95,7 @@ def update(frame):
     ax.set_xlabel('Numerator')
     ax.set_ylabel('Denominator')
     ax.set_zlabel('Steps')
-    ax.set_title('Steps Required for Different Numbers and d Values')
+    ax.set_title('Approximate Squaring Iterations')
     
     # Set axis limits
     ax.set_xlim(number_range)
@@ -117,14 +117,24 @@ def update(frame):
     
     return [surf]
 
-# Create animation
+# Set up formatting for the movie files
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=30, metadata=dict(artist='Me'), bitrate=1800)
+
+# Create animation with a fixed number of frames
+num_frames = 360  # This will give 6 complete rotations
 anim = animation.FuncAnimation(
     fig,
     update,
-    frames=None,
+    frames=num_frames,
     interval=50,
     blit=False
 )
 
-plt.tight_layout()
+# Save animation
+print("\nSaving animation...")
+anim.save('approximate_squaring.mp4', writer=writer)
+print("Animation saved as 'approximate_squaring.mp4'")
+
+# Display the animation (optional)
 plt.show()
