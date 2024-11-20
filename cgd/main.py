@@ -13,12 +13,11 @@ def conjugate_gradient(A, b, x0, tol=1e-8):
     d = r.copy()
     
     xs = [x.copy()]
-    rs = [r.copy()]
     ds = [d.copy()]
     
     rTr_old = r.T @ r
     
-    for i in range(dim):
+    for _ in range(dim):
         Ad = A @ d
         alpha = rTr_old / (d.T @ Ad)
         x = x + alpha * d
@@ -28,7 +27,6 @@ def conjugate_gradient(A, b, x0, tol=1e-8):
         d = r + beta * d
         
         xs.append(x.copy())
-        rs.append(r.copy())
         ds.append(d.copy())
         
         rTr_old = rTr_new
@@ -36,7 +34,7 @@ def conjugate_gradient(A, b, x0, tol=1e-8):
         if np.sqrt(rTr_new) < tol:
             break
     
-    return np.array(xs), np.array(rs), np.array(ds)
+    return np.array(xs), np.array(ds)
 
 def interpolate_path(xs, points_per_segment=50):
     """Create a path that follows exact line segments between optimization points"""
@@ -50,7 +48,7 @@ def interpolate_path(xs, points_per_segment=50):
     return np.vstack(path_points)
 
 
-def create_and_save_visualization(A, b, xs, rs, ds, filename='cgd_visualization.mp4', fps=30):
+def create_and_save_visualization(A, b, xs, ds, filename='cgd_visualization.mp4', fps=30):
     """
     Creates visualization and saves it as an MP4 file
     
@@ -191,6 +189,7 @@ def create_and_save_visualization(A, b, xs, rs, ds, filename='cgd_visualization.
     # Save the animation
     anim.save(filename, writer=writer)
     plt.close()
+    plt.show()
     
     print(f"Animation saved as {filename}")
 
@@ -202,9 +201,9 @@ if __name__ == "__main__":
     x0 = np.array([3.0, 3.0])
     
     # Run conjugate gradient
-    xs, rs, ds = conjugate_gradient(A, b, x0)
+    xs, ds = conjugate_gradient(A, b, x0)
     
     # Create and save visualization
-    create_and_save_visualization(A, b, xs, rs, ds, 
+    create_and_save_visualization(A, b, xs, ds, 
                                 filename='cgd_visualization.mp4',
                                 fps=30)
