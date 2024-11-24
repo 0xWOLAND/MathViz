@@ -20,6 +20,25 @@ def sample_mixture_gaussian(N):
                       np.random.normal(5, 1, N))
     return samples
 
+def importance_sampling(N):
+    """
+    Importance sampling using a N(0,5) proposal distribution
+    Returns samples and their weights
+    """
+    # Proposal distribution: N(0,5)
+    proposal_samples = np.random.normal(0, 5, N)
+    
+    # Compute unnormalized weights
+    target_density = 0.1 * norm.pdf(proposal_samples, loc=-5, scale=1) + \
+                    0.9 * norm.pdf(proposal_samples, loc=5, scale=1)
+    proposal_density = norm.pdf(proposal_samples, loc=0, scale=5)
+    unnormalized_weights = target_density / proposal_density
+    
+    # Normalize weights
+    weights = unnormalized_weights / np.sum(unnormalized_weights)
+    
+    return proposal_samples, weights
+
 # Set random seed for reproducibility
 np.random.seed(42)
 
@@ -34,7 +53,7 @@ true_density = mixture_gaussian(x)
 line_true, = ax.plot(x, true_density, 'cyan', label='True Distribution', linewidth=2)
 ax.set_xlim(-8, 8)
 ax.set_ylim(0, 0.5)
-ax.set_title('Monte Carlo Sampling Animation', color='white', pad=20)
+ax.set_title('Monte Carlo vs Importance Sampling', color='white', pad=20)
 ax.set_xlabel('x')
 ax.set_ylabel('Density')
 ax.grid(True, alpha=0.2)
@@ -49,15 +68,24 @@ def update(frame):
     # Plot true density
     ax.plot(x, true_density, 'cyan', label='True Distribution', linewidth=2)
     
-    # Generate new samples and create histogram
-    samples = sample_mixture_gaussian(N)
-    ax.hist(samples, bins=50, density=True, alpha=0.6, color='magenta',
-            label='Monte Carlo Approximation')
+    # Direct Monte Carlo sampling
+    mc_samples = sample_mixture_gaussian(N)
+    ax.hist(mc_samples, bins=50, density=True, alpha=0.4, color='magenta',
+            label='Monte Carlo', histtype='stepfilled')
+    
+    # Importance sampling
+    is_samples, is_weights = importance_sampling(N)
+    ax.hist(is_samples, bins=50, density=True, alpha=0.4, color='yellow',
+            weights=is_weights * N, label='Importance Sampling', histtype='stepfilled')
+    
+    # Plot proposal distribution (scaled for visibility)
+    proposal = norm.pdf(x, loc=0, scale=5) * 0.5
+    ax.plot(x, proposal, '--', color='green', alpha=0.5, label='Proposal Distribution')
     
     # Set plot properties
     ax.set_xlim(-8, 8)
     ax.set_ylim(0, 0.5)
-    ax.set_title(f'Monte Carlo Sampling (N={N})', color='white', pad=20)
+    ax.set_title(f'Monte Carlo vs Importance Sampling (N={N})', color='white', pad=20)
     ax.set_xlabel('x')
     ax.set_ylabel('Density')
     ax.grid(True, alpha=0.2)
@@ -76,5 +104,5 @@ anim = FuncAnimation(
 plt.tight_layout()
 
 # Save animation
-anim.save('monte_carlo_animation.gif', writer='pillow', fps=10, dpi=100)
+anim.save('sampling_comparison.gif', writer='pillow', fps=10, dpi=100)
 plt.close()
