@@ -1,237 +1,156 @@
-import pandas as pd
 import numpy as np
-from typing import List, Dict, Tuple
-import random
-import os
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.animation import FuncAnimation
+import matplotlib.animation as animation
 
-class AdPlacementOptimizer:
-    def __init__(self, data_path: str, budget: float = 1_000_000_000):
-        """Initialize the optimizer with county data and budget"""
-        # Ensure correct file path
-        self.data_path = os.path.join(os.path.dirname(__file__), data_path)
-        self.data = pd.read_csv(self.data_path)
-        self.budget = budget
-        
-        # Clean data first
-        self.clean_data()
-        
-        self.counties = self.data['County'].unique()
-        self.n_counties = len(self.counties)
-        
-        # Ad channels and their base costs (scaled for major campaign)
-        self.channels = {
-            'TV': {
-                'base_cost': 2_000_000,  # $2M base cost for TV campaign per county
-                'reach_multiplier': 0.4,  # Reaches 40% of target audience
-                'description': 'Television advertising including local stations and cable'
-            },
-            'Digital': {
-                'base_cost': 800_000,    # $800K base cost for digital campaign per county
-                'reach_multiplier': 0.35, # Reaches 35% of target audience
-                'description': 'Social media, display ads, search, and streaming platforms'
-            },
-            'Grassroots': {
-                'base_cost': 400_000,    # $400K base cost for grassroots campaign per county
-                'reach_multiplier': 0.25, # Reaches 25% of target audience
-                'description': 'Community events, local partnerships, and direct outreach'
-            }
-        }
-        
-        # Normalize demographic factors for scoring
-        self.normalize_data()
+def rosenbrock(x, y, a=1, b=100):
+    """
+    Rosenbrock function (banana function)
+    f(x,y) = (a-x)^2 + b(y-x^2)^2
+    """
+    return (a - x)**2 + b * (y - x**2)**2
 
-    def clean_data(self):
-        """Clean the data before normalization"""
-        # Define numeric columns to clean
-        numeric_columns = [
-            'Education_Less_Than_9th_Percent',
-            'Language_Isolation_Percent',
-            'Age_18_39_Percent',
-            'Age_18_39_People'
-        ]
-        
-        for col in numeric_columns:
-            if col in self.data.columns:
-                # Replace 'data not available' with NaN
-                self.data[col] = pd.to_numeric(
-                    self.data[col].replace({'data not available': np.nan, 'N/A': np.nan}), 
-                    errors='coerce'
-                )
-                
-                # Fill NaN values with column mean only for numeric columns
-                mean_value = self.data[col].mean()
-                self.data[col] = self.data[col].fillna(mean_value)
+def proposal(current_state, step_size=0.3):
+    """Generate proposal state using random walk"""
+    return current_state + np.random.normal(0, step_size, size=2)
 
-    def normalize_data(self):
-        """Normalize the demographic data for scoring"""
-        cols_to_normalize = [
-            'Education_Less_Than_9th_Percent',
-            'Language_Isolation_Percent',
-            'Age_18_39_Percent'
-        ]
-        
-        for col in cols_to_normalize:
-            if col in self.data.columns:
-                min_val = self.data[col].min()
-                max_val = self.data[col].max()
-                if max_val > min_val:  # Avoid division by zero
-                    self.data[f'{col}_normalized'] = (self.data[col] - min_val) / (max_val - min_val)
-                else:
-                    self.data[f'{col}_normalized'] = 1.0
-
-    def calculate_impact_score(self, allocation: Dict[str, Dict[str, float]]) -> float:
-        """Calculate the impact score for a given allocation"""
-        total_score = 0
-        total_cost = 0
-        
-        for county, channels in allocation.items():
-            county_data = self.data[self.data['County'] == county].iloc[0]
-            
-            # Population-weighted demographic factors
-            population = float(county_data.get('Age_18_39_People', 0))  # Ensure float
-            education_factor = float(county_data.get('Education_Less_Than_9th_Percent_normalized', 0))
-            language_factor = float(county_data.get('Language_Isolation_Percent_normalized', 0))
-            age_factor = float(county_data.get('Age_18_39_Percent_normalized', 0))
-            
-            county_score = 0
-            county_cost = 0
-            
-            for channel, amount in channels.items():
-                channel_info = self.channels[channel]
-                channel_cost = amount * channel_info['base_cost']
-                channel_reach = amount * channel_info['reach_multiplier'] * population
-                
-                # Calculate channel-specific impact with population weighting
-                if channel == 'TV':
-                    impact = channel_reach * (0.4 * age_factor + 0.3 * education_factor + 0.3 * language_factor)
-                elif channel == 'Digital':
-                    impact = channel_reach * (0.6 * age_factor + 0.2 * education_factor + 0.2 * language_factor)
-                else:  # Grassroots
-                    impact = channel_reach * (0.3 * age_factor + 0.4 * education_factor + 0.3 * language_factor)
-                
-                county_score += impact
-                county_cost += channel_cost
-            
-            total_score += county_score
-            total_cost += county_cost
-        
-        # Penalize if over budget
-        if total_cost > self.budget:
-            return -float('inf')
-        
-        # Add efficiency bonus if using budget well (within 5% of total)
-        if total_cost > self.budget * 0.95:
-            total_score *= 1.1
-        
-        return total_score
-
-    def propose_new_allocation(self, current: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
-        """Generate a new proposed allocation"""
-        new_allocation = {county: {channel: amount for channel, amount in channels.items()}
-                         for county, channels in current.items()}
-        
-        # Randomly select 1-3 counties to modify
-        n_counties = random.randint(1, 3)
-        selected_counties = random.sample(list(new_allocation.keys()), n_counties)
-        
-        for county in selected_counties:
-            # Randomly select a channel
-            channel = random.choice(list(self.channels.keys()))
-            
-            # Modify allocation with smaller steps for more precise optimization
-            delta = random.uniform(-0.2, 0.2)
-            new_allocation[county][channel] = max(0, min(2, new_allocation[county][channel] + delta))
-        
-        return new_allocation
-
-    def metropolis_hastings(self, n_iterations: int = 20000, temperature: float = 1.0) -> Tuple[Dict[str, Dict[str, float]], float]:
-        """Run Metropolis-Hastings algorithm to optimize ad placement"""
-        # Initialize with small random allocations
-        current_allocation = {
-            county: {channel: random.uniform(0, 0.5) for channel in self.channels.keys()}
-            for county in self.counties
-        }
-        
-        current_score = self.calculate_impact_score(current_allocation)
-        best_allocation = current_allocation.copy()
-        best_score = current_score
-        
-        # Track progress
-        progress_interval = n_iterations // 10
-        
-        for i in range(n_iterations):
-            proposed_allocation = self.propose_new_allocation(current_allocation)
-            proposed_score = self.calculate_impact_score(proposed_allocation)
-            
-            # Calculate acceptance probability
-            if proposed_score > current_score:
-                acceptance_prob = 1.0
-            else:
-                acceptance_prob = np.exp((proposed_score - current_score) / temperature)
-            
-            if random.random() < acceptance_prob:
-                current_allocation = proposed_allocation
-                current_score = proposed_score
-                
-                if current_score > best_score:
-                    best_allocation = current_allocation.copy()
-                    best_score = current_score
-            
-            # Decrease temperature
-            temperature *= 0.9999
-            
-            # Print progress
-            if (i + 1) % progress_interval == 0:
-                print(f"Progress: {(i + 1) // progress_interval * 10}% complete")
-        
-        return best_allocation, best_score
-
-def main():
-    try:
-        # Use relative path to the CSV file
-        data_path = 'hdpulse_data.csv'
-        
-        # Initialize optimizer with $1 billion budget
-        optimizer = AdPlacementOptimizer(data_path)
-        
-        print("Starting optimization with $1 billion budget...")
-        print("This will take a few minutes to complete.")
-        
-        best_allocation, best_score = optimizer.metropolis_hastings()
-        
-        # Print results
-        print(f"\nOptimization completed with score: {best_score:,.2f}")
-        print(f"Total budget: ${optimizer.budget:,.2f}")
-        
-        # Calculate and display total spend
-        total_spend = 0
-        county_totals = {}
-        
-        for county, channels in best_allocation.items():
-            county_total = sum(amount * optimizer.channels[channel]['base_cost'] 
-                             for channel, amount in channels.items())
-            county_totals[county] = county_total
-            total_spend += county_total
-        
-        print(f"Total allocated: ${total_spend:,.2f}")
-        print(f"Budget utilization: {(total_spend/optimizer.budget)*100:.1f}%")
-        
-        # Print top 15 counties by allocation
-        print("\nTop 15 counties by allocation:")
-        for county, total in sorted(county_totals.items(), key=lambda x: x[1], reverse=True)[:15]:
-            print(f"\n{county}: ${total:,.2f}")
-            county_data = optimizer.data[optimizer.data['County'] == county].iloc[0]
-            print(f"Population (18-39): {int(county_data['Age_18_39_People']):,}")
-            for channel, amount in best_allocation[county].items():
-                channel_spend = amount * optimizer.channels[channel]['base_cost']
-                if channel_spend > 0:
-                    print(f"  {channel}: ${channel_spend:,.2f} "
-                          f"({amount:.2f} units, {(channel_spend/total)*100:.1f}% of county budget)")
+def metropolis_hastings(n_iterations=10000, step_size=0.3):
+    # Initial state
+    current_state = np.array([0.0, 0.0])
     
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    # Storage for chain
+    chain = np.zeros((n_iterations, 2))
+    
+    # Store initial state
+    chain[0] = current_state
+    
+    # Run Metropolis-Hastings
+    for i in range(1, n_iterations):
+        # Generate proposal
+        proposed_state = proposal(current_state, step_size)
+        
+        # Calculate acceptance ratio
+        current_likelihood = -rosenbrock(current_state[0], current_state[1])
+        proposed_likelihood = -rosenbrock(proposed_state[0], proposed_state[1])
+        
+        # Log acceptance ratio
+        log_ratio = proposed_likelihood - current_likelihood
+        
+        # Accept or reject
+        if np.log(np.random.random()) < log_ratio:
+            current_state = proposed_state
+            
+        chain[i] = current_state
+    
+    return chain
+
+def create_3d_animation(chain, interval=20, n_frames=400):
+    """Create 3D animation of the sampling process"""
+    # Set up the figure and 3D axis with black background
+    plt.style.use('dark_background')
+    fig = plt.figure(figsize=(12, 8))
+    
+    # Create main 3D axis
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Set figure and axis background color
+    fig.patch.set_facecolor('black')
+    ax.set_facecolor('black')
+    
+    # Fixed view limits
+    view_limits = {
+        'x': [-2.5, 2.5],
+        'y': [-1.5, 3.5],
+        'z': [0, 1500]
+    }
+    
+    # Create surface plot of Rosenbrock function
+    x = np.linspace(view_limits['x'][0], view_limits['x'][1], 200)
+    y = np.linspace(view_limits['y'][0], view_limits['y'][1], 200)
+    X, Y = np.meshgrid(x, y)
+    Z = rosenbrock(X, Y)
+    
+    # Plot the surface with transparency
+    surface = ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.3,
+                            rstride=2, cstride=2, linewidth=0,
+                            antialiased=True)
+    
+    # Initialize empty line collection
+    lines = []
+    
+    # Set labels and title with white color and LaTeX formula
+    ax.set_xlabel('X', color='white')
+    ax.set_ylabel('Y', color='white')
+    ax.set_zlabel('Z', color='white')
+    title = (r'Metropolis-Hastings Sampling of Rosenbrock Function'
+             '\n' r'$f(x,y) = (1-x)^2 + 100(y-x^2)^2$')
+    ax.set_title(title, color='white', pad=20)
+    
+    # Set white color for axis ticks
+    ax.tick_params(colors='white')
+    
+    # Set fixed view limits
+    ax.set_xlim(view_limits['x'])
+    ax.set_ylim(view_limits['y'])
+    ax.set_zlim(view_limits['z'])
+    
+    def init():
+        return []
+    
+    def update(frame):
+        # Remove old lines
+        for line in lines:
+            line.remove()
+        lines.clear()
+        
+        # Fixed camera angle with slight elevation
+        ax.view_init(elev=30, azim=45)
+        
+        # Get points up to current frame
+        idx = int((frame / n_frames) * len(chain))
+        points = chain[:idx]
+        
+        if len(points) > 1:
+            # Create segments for coloring
+            segments = 50
+            segment_size = max(len(points) // segments, 1)
+            
+            for i in range(0, len(points)-segment_size, segment_size):
+                segment = points[i:i+segment_size+1]
+                x_data = segment[:, 0]
+                y_data = segment[:, 1]
+                z_data = rosenbrock(x_data, y_data)
+                
+                # Create color gradient from dark red to bright red
+                progress = i / len(points)
+                color = plt.cm.Reds(0.3 + 0.7 * progress)
+                
+                # Add new line segment
+                line, = ax.plot(x_data, y_data, z_data, 
+                              color=color, linewidth=1.5, alpha=0.8)
+                lines.append(line)
+        
+        return lines
+    
+    # Create and display animation
+    anim = FuncAnimation(fig, update, frames=n_frames, 
+                        init_func=init, interval=interval,
+                        blit=True)
+    
+    # Remove grid for cleaner look
+    ax.grid(False)
+    
+    # Set axis pane colors to dark
+    ax.xaxis.set_pane_color((0.02, 0.02, 0.02, 1.0))
+    ax.yaxis.set_pane_color((0.02, 0.02, 0.02, 1.0))
+    ax.zaxis.set_pane_color((0.02, 0.02, 0.02, 1.0))
+    
+    plt.show()
 
 if __name__ == "__main__":
-    main()
+    # Run simulation
+    chain = metropolis_hastings(n_iterations=100000, step_size=0.1)
+    
+    # Create animation
+    create_3d_animation(chain, interval=30, n_frames=400)  # slightly slower interval for smoother color transition 
