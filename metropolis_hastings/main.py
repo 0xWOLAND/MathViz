@@ -41,9 +41,9 @@ def metropolis_hastings(n_iterations=10000, step_size=0.3):
     
     return chain
 
-def create_3d_animation(chain, interval=20, n_frames=400, save_path='metropolis_hastings.gif'):
+def create_3d_animation(chain, interval=40, n_frames=200, save_path='metropolis_hastings.gif'):
     plt.style.use('dark_background')
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(8, 6))
     ax = fig.add_subplot(111, projection='3d')
     
     fig.patch.set_facecolor('black')
@@ -55,13 +55,13 @@ def create_3d_animation(chain, interval=20, n_frames=400, save_path='metropolis_
         'z': [0, 1500]
     }
     
-    x = np.linspace(view_limits['x'][0], view_limits['x'][1], 200)
-    y = np.linspace(view_limits['y'][0], view_limits['y'][1], 200)
+    x = np.linspace(view_limits['x'][0], view_limits['x'][1], 100)
+    y = np.linspace(view_limits['y'][0], view_limits['y'][1], 100)
     X, Y = np.meshgrid(x, y)
     Z = rosenbrock(X, Y)
     
     surface = ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.3,
-                            rstride=2, cstride=2, linewidth=0,
+                            rstride=3, cstride=3, linewidth=0,
                             antialiased=True)
     
     lines = []
@@ -93,7 +93,7 @@ def create_3d_animation(chain, interval=20, n_frames=400, save_path='metropolis_
         points = chain[:idx]
         
         if len(points) > 1:
-            segments = 50
+            segments = 30
             segment_size = max(len(points) // segments, 1)
             
             for i in range(0, len(points)-segment_size, segment_size):
@@ -121,11 +121,14 @@ def create_3d_animation(chain, interval=20, n_frames=400, save_path='metropolis_
     ax.yaxis.set_pane_color((0.02, 0.02, 0.02, 1.0))
     ax.zaxis.set_pane_color((0.02, 0.02, 0.02, 1.0))
     
-    anim.save(save_path, writer='pillow', fps=1000/interval)
+    anim.save(save_path, 
+             writer='pillow', 
+             fps=25, 
+             dpi=72)
     
     plt.show()
 
 if __name__ == "__main__":
-    chain = metropolis_hastings(n_iterations=100000, step_size=0.1)
-    create_3d_animation(chain, interval=30, n_frames=400, 
+    chain = metropolis_hastings(n_iterations=10000, step_size=0.1)
+    create_3d_animation(chain, interval=40, n_frames=200, 
                        save_path='metropolis_hastings.gif')
